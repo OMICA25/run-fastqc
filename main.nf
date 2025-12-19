@@ -1,11 +1,17 @@
 #!/usr/bin/env nextflow
 
 raw_reads = params.rawReads
-out_dir = file(params.outDir)
+out_dir  = file(params.outDir)
 
 out_dir.mkdir()
 
-read_pair = Channel.fromFilePairs("${raw_reads}/*R[1,2].fastq", type: 'file')
+/*
+  Single-end mode:
+  - read all fastq / fastq.gz files from the input directory
+  - create a channel of tuples: (sampleName, file)
+  - sampleName uses the file base name (without extension)
+*/
+reads = Channel.fromPath("${raw_reads}/*.{fastq,fastq.gz}").map { f -> tuple(f.baseName, f) }
 
 process runFastQC{
     tag { "${params.projectName}.rFQC.${sample}" }
@@ -13,17 +19,16 @@ process runFastQC{
     publishDir "${out_dir}/qc/raw/${sample}", mode: 'copy', overwrite: false
 
     input:
-        set sample, file(in_fastq) from read_pair
+        tuple val(sample), file(in_fastq) from reads
 
     output:
         file("${sample}_fastqc/*.zip") into fastqc_files
 
     """
-    mkdir ${sample}_fastqc
+    mkdir -p ${sample}_fastqc
     fastqc --outdir ${sample}_fastqc \
     -t ${task.cpus} \
-    ${in_fastq.get(0)} \
-    ${in_fastq.get(1)}
+    ${in_fastq}
     """
 }
 
